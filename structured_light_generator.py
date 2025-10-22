@@ -339,13 +339,22 @@ def visualize_all_patterns(generator: StructuredLightGenerator,
 
     plt.tight_layout()
 
+    # Create output directory if it doesn't exist
+    output_dir = Path("output")
+    output_dir.mkdir(exist_ok=True)
+
+    # Generate timestamped filename
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = output_dir / f"structured_light_patterns_{timestamp}.png"
+
     if has_display:
         print("Displaying patterns in window...")
         plt.show()
+        # Also save to file even when displaying
+        plt.savefig(filename, dpi=150, bbox_inches='tight')
+        print(f"Saved visualization to: {filename}")
     else:
         # Save to timestamped file
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"structured_light_patterns_{timestamp}.png"
         plt.savefig(filename, dpi=150, bbox_inches='tight')
         print(f"No display available. Saved visualization to: {filename}")
         plt.close(fig)
