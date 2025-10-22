@@ -13,9 +13,12 @@ Usage:
 
 import numpy as np
 import cv2
+import matplotlib
 import matplotlib.pyplot as plt
 from pathlib import Path
 from typing import Tuple, Optional
+from datetime import datetime
+import os
 
 
 class StructuredLightGenerator:
@@ -238,12 +241,44 @@ def create_synthetic_depth_map(width: int = 640, height: int = 480) -> np.ndarra
     return depth_map
 
 
+def _has_display() -> bool:
+    """
+    Check if a display is available for showing plots.
+
+    Returns:
+        True if display is available, False otherwise
+    """
+    # Check common display environment variables
+    if os.environ.get('DISPLAY'):
+        return True
+
+    # On macOS, displays are usually available
+    if os.name == 'posix' and os.uname().sysname == 'Darwin':
+        return True
+
+    # Try to detect if we're in a headless environment
+    try:
+        import tkinter
+        tkinter.Tk().withdraw()
+        return True
+    except:
+        return False
+
+
 def visualize_all_patterns(generator: StructuredLightGenerator,
                           depth_map: np.ndarray,
                           rgb_image: Optional[np.ndarray] = None):
     """
     Generate and visualize all pattern types.
+    Shows in window if display available, otherwise saves to timestamped file.
     """
+    # Check if display is available
+    has_display = _has_display()
+
+    if not has_display:
+        # Use non-interactive backend for headless environments
+        matplotlib.use('Agg')
+
     fig, axes = plt.subplots(3, 3, figsize=(15, 15))
     fig.suptitle('Synthetic Structured Light Patterns', fontsize=16)
 
@@ -303,7 +338,17 @@ def visualize_all_patterns(generator: StructuredLightGenerator,
         axes[2, 2].axis('off')
 
     plt.tight_layout()
-    plt.show()
+
+    if has_display:
+        print("Displaying patterns in window...")
+        plt.show()
+    else:
+        # Save to timestamped file
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"structured_light_patterns_{timestamp}.png"
+        plt.savefig(filename, dpi=150, bbox_inches='tight')
+        print(f"No display available. Saved visualization to: {filename}")
+        plt.close(fig)
 
 
 def main():
