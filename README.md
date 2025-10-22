@@ -2,6 +2,8 @@
 
 A Python tool for generating synthetic structured light patterns overlaid on images with depth data. This is designed for data augmentation to improve vision models for robotic grasping tasks.
 
+![Structured Light Patterns](output/structured_light_patterns_20251022_083755.png)
+
 ## Overview
 
 Structured light is a 3D scanning technique that projects known patterns onto objects and analyzes the deformation to extract depth information. This tool simulates various structured light patterns (like those from Kinect, laser scanners, or projector-camera systems) to create synthetic training data for computer vision models.
