@@ -668,10 +668,16 @@ def main():
     # 4. Generate patterns
     print("4. Generating patterns and rendering...")
 
+    display_pattern_idx = None  # Track which pattern to display
     if config and 'patterns' in config:
         patterns = []
-        for pat_cfg in config['patterns']:
+        for idx, pat_cfg in enumerate(config['patterns']):
             pat_type = pat_cfg['type']
+
+            # Check if this pattern should be displayed
+            if pat_cfg.get('display', False):
+                display_pattern_idx = idx
+
             if 'stripes' in pat_type:
                 orientation = 'vertical' if 'vertical' in pat_type else 'horizontal'
                 pattern = projector.create_stripe_pattern(
@@ -699,6 +705,7 @@ def main():
             ('dots', projector.create_dot_pattern(dot_spacing=40, dot_size=4)),
             ('grid', projector.create_grid_pattern(grid_spacing=50, line_thickness=3))
         ]
+        display_pattern_idx = 0  # Default to first pattern
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -721,8 +728,13 @@ def main():
 
     # Render final comparison
     if save_comparison:
-        print("\n5. Creating final comparison visualization...")
-        rgb_final, depth_final = renderer.render(scene, patterns[0][1], ambient_light=ambient_light, pattern_intensity=pattern_intensity)
+        # Use the pattern marked for display, or default to first pattern
+        if display_pattern_idx is None:
+            display_pattern_idx = 0
+
+        display_pattern_name, display_pattern = patterns[display_pattern_idx]
+        print(f"\n5. Creating final comparison visualization (displaying: {display_pattern_name})...")
+        rgb_final, depth_final = renderer.render(scene, display_pattern, ambient_light=ambient_light, pattern_intensity=pattern_intensity)
         final_path = output_dir / f"{output_prefix}_comparison_{timestamp}.png"
         visualize_results(rgb_final, depth_final, save_path=final_path, show=has_display)
 
