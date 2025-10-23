@@ -601,9 +601,10 @@ class StructuredLightRenderer:
                     continue
 
                 # Back-project from projector to 3D world
+                # In OpenGL, projector looks down -Z, so depth values need to be negated
                 x_proj = (u_proj - proj_cx) * d_proj / proj_fx
                 y_proj = (v_proj - proj_cy) * d_proj / proj_fy
-                z_proj = d_proj
+                z_proj = -d_proj  # Negative because projector looks down -Z
 
                 # Transform to world coordinates
                 point_proj_space = np.array([x_proj, y_proj, z_proj, 1.0])
@@ -613,7 +614,8 @@ class StructuredLightRenderer:
                 point_cam = camera_pose_inv @ point_world
 
                 # Project onto camera image plane
-                if point_cam[2] > 0:  # In front of camera
+                # In OpenGL, camera looks down -Z, so points in front have negative Z
+                if point_cam[2] < 0:  # In front of camera
                     cam_u = camera_fx * point_cam[0] / point_cam[2] + camera_cx
                     cam_v = camera_fy * point_cam[1] / point_cam[2] + camera_cy
 
@@ -628,8 +630,6 @@ class StructuredLightRenderer:
                             pattern_value
                         )
 
-        # NOTE: Forward projection currently has coordinate transform issues
-        # Use backward projection (stripes) for now, which works correctly
         return pattern_rgb
 
 
