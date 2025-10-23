@@ -20,10 +20,12 @@ import matplotlib
 import matplotlib.pyplot as plt
 import trimesh
 import pyrender
+import yaml
 from pathlib import Path
-from typing import Tuple, List, Optional, Dict
+from typing import Tuple, List, Optional, Dict, Any
 from datetime import datetime
 import os
+import sys
 
 
 def _has_display() -> bool:
@@ -43,6 +45,49 @@ def _has_display() -> bool:
         return True
     except:
         return False
+
+
+def euler_to_rotation_matrix(roll: float, pitch: float, yaw: float) -> np.ndarray:
+    """
+    Convert Euler angles (in degrees) to a 3x3 rotation matrix.
+    Uses ZYX convention (yaw-pitch-roll).
+
+    Args:
+        roll: Rotation around X-axis in degrees
+        pitch: Rotation around Y-axis in degrees
+        yaw: Rotation around Z-axis in degrees
+
+    Returns:
+        3x3 rotation matrix
+    """
+    # Convert to radians
+    roll_rad = np.radians(roll)
+    pitch_rad = np.radians(pitch)
+    yaw_rad = np.radians(yaw)
+
+    # Rotation around X (roll)
+    Rx = np.array([
+        [1, 0, 0],
+        [0, np.cos(roll_rad), -np.sin(roll_rad)],
+        [0, np.sin(roll_rad), np.cos(roll_rad)]
+    ])
+
+    # Rotation around Y (pitch)
+    Ry = np.array([
+        [np.cos(pitch_rad), 0, np.sin(pitch_rad)],
+        [0, 1, 0],
+        [-np.sin(pitch_rad), 0, np.cos(pitch_rad)]
+    ])
+
+    # Rotation around Z (yaw)
+    Rz = np.array([
+        [np.cos(yaw_rad), -np.sin(yaw_rad), 0],
+        [np.sin(yaw_rad), np.cos(yaw_rad), 0],
+        [0, 0, 1]
+    ])
+
+    # Combined rotation: Rz * Ry * Rx
+    return Rz @ Ry @ Rx
 
 
 class StructuredLightProjector:
@@ -160,14 +205,16 @@ class Scene3D:
                 size: Tuple[float, float, float] = (0.3, 0.3, 0.3),
                 position: np.ndarray = np.array([0.0, 0.0, 0.0]),
                 rotation: Optional[np.ndarray] = None,
+                euler: Optional[Tuple[float, float, float]] = None,
                 color: Optional[np.ndarray] = None) -> None:
         """
         Add a box to the scene.
 
         Args:
-            size: Box dimensions (width, height, depth)
+            size: Box dimensions (width, depth, height)
             position: Box center position (x, y, z)
-            rotation: 3x3 rotation matrix (optional)
+            rotation: 3x3 rotation matrix (optional, overridden by euler if both provided)
+            euler: Euler angles (roll, pitch, yaw) in degrees (optional)
             color: RGB color [0-255] (optional, random if None)
         """
         # Create box mesh
@@ -183,8 +230,14 @@ class Scene3D:
 
         # Create pose matrix
         pose = np.eye(4)
+
+        # Handle rotation - euler takes precedence if both provided
+        if euler is not None:
+            rotation = euler_to_rotation_matrix(*euler)
+
         if rotation is not None:
             pose[:3, :3] = rotation
+
         pose[:3, 3] = position
 
         self.meshes.append(box)
@@ -406,6 +459,80 @@ class StructuredLightRenderer:
         return pattern_rgb
 
 
+def load_config(config_path: str) -> Dict[str, Any]:
+    """
+    Load configuration from YAML file.
+
+    Args:
+        config_path: Path to YAML configuration file
+
+    Returns:
+        Configuration dictionary
+    """
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    return config
+
+
+def build_scene_from_config(config: Dict[str, Any]) -> Scene3D:
+    """
+    Build a 3D scene from configuration.
+
+    Args:
+        config: Configuration dictionary
+
+    Returns:
+        Configured Scene3D object
+    """
+    scene = Scene3D()
+    scene_config = config.get('scene', {})
+
+    # Add ground plane if enabled
+    if scene_config.get('ground_plane', {}).get('enabled', True):
+        gp = scene_config['ground_plane']
+        scene.add_ground_plane(
+            size=gp.get('size', 2.0),
+            height=gp.get('height', -0.5),
+            color=np.array(gp.get('color', [200, 200, 200]))
+        )
+
+    # Add manually specified boxes
+    for box_config in scene_config.get('boxes', []):
+        scene.add_box(
+            size=tuple(box_config['size']),
+            position=np.array(box_config['position']),
+            euler=tuple(box_config['orientation']) if 'orientation' in box_config else None,
+            color=np.array(box_config['color']) if box_config.get('color') is not None else None
+        )
+
+    # Add random boxes if enabled
+    if scene_config.get('random_boxes', {}).get('enabled', False):
+        rb = scene_config['random_boxes']
+        count = rb.get('count', 5)
+
+        size_min = np.array(rb['size_range']['min'])
+        size_max = np.array(rb['size_range']['max'])
+
+        pos_bounds = rb['position_bounds']
+        ori_range = rb['orientation_range']
+
+        for _ in range(count):
+            size = np.random.uniform(size_min, size_max)
+            position = np.array([
+                np.random.uniform(*pos_bounds['x']),
+                np.random.uniform(*pos_bounds['y']),
+                np.random.uniform(*pos_bounds['z'])
+            ])
+            euler = (
+                np.random.uniform(*ori_range['roll']),
+                np.random.uniform(*ori_range['pitch']),
+                np.random.uniform(*ori_range['yaw'])
+            )
+            scene.add_box(size=tuple(size), position=position, euler=euler)
+
+    return scene
+
+
 def visualize_results(rgb_image: np.ndarray,
                      depth_map: np.ndarray,
                      save_path: Optional[Path] = None,
@@ -445,75 +572,168 @@ def visualize_results(rgb_image: np.ndarray,
 def main():
     """
     Main function demonstrating 3D structured light simulation.
+    Supports config file via command line argument.
+
+    Usage:
+        python structured_light_3d.py                    # Use defaults
+        python structured_light_3d.py config.yaml        # Use config file
     """
     print("3D Structured Light Simulator")
     print("=" * 50)
+
+    # Check for config file argument
+    config_path = sys.argv[1] if len(sys.argv) > 1 else None
+
+    if config_path:
+        print(f"\nLoading configuration from: {config_path}")
+        config = load_config(config_path)
+    else:
+        print("\nNo config file specified, using default parameters")
+        print("Usage: python structured_light_3d.py [config.yaml]")
+        config = None
 
     # Check display availability
     has_display = _has_display()
     if not has_display:
         matplotlib.use('Agg')
 
-    # Create output directory
-    output_dir = Path("output")
+    # Setup output directory
+    if config and 'output' in config:
+        output_dir = Path(config['output'].get('directory', 'output'))
+        output_prefix = config['output'].get('prefix', 'structured_light_3d')
+    else:
+        output_dir = Path("output")
+        output_prefix = "structured_light_3d"
+
     output_dir.mkdir(exist_ok=True)
 
     # 1. Create projector
-    print("\n1. Creating projector at position (0.5, -0.8, 1.5)...")
-    projector = StructuredLightProjector(
-        position=np.array([0.5, -0.8, 1.5]),
-        look_at=np.array([0.0, 0.0, 0.0]),
-        fov=50.0,
-        resolution=(1024, 768)
-    )
+    if config and 'projector' in config:
+        proj_cfg = config['projector']
+        print(f"\n1. Creating projector at position {proj_cfg['position']}...")
+        projector = StructuredLightProjector(
+            position=np.array(proj_cfg['position']),
+            look_at=np.array(proj_cfg['look_at']),
+            fov=proj_cfg['fov'],
+            resolution=tuple(proj_cfg['resolution'])
+        )
+    else:
+        print("\n1. Creating projector at position (0.5, -0.8, 1.5)...")
+        projector = StructuredLightProjector(
+            position=np.array([0.5, -0.8, 1.5]),
+            look_at=np.array([0.0, 0.0, 0.0]),
+            fov=50.0,
+            resolution=(1024, 768)
+        )
 
-    # 2. Create scene with random boxes
-    print("2. Generating scene with random boxes...")
-    scene = Scene3D()
-    scene.add_ground_plane(size=3.0, height=-0.5)
-    scene.generate_random_boxes(num_boxes=5, bounds=(1.0, 1.0, 0.4))
+    # 2. Create scene
+    if config and 'scene' in config:
+        print("2. Building scene from configuration...")
+        scene = build_scene_from_config(config)
+    else:
+        print("2. Generating scene with random boxes...")
+        scene = Scene3D()
+        scene.add_ground_plane(size=3.0, height=-0.5)
+        scene.generate_random_boxes(num_boxes=5, bounds=(1.0, 1.0, 0.4))
 
     # 3. Create renderer with camera
-    print("3. Setting up camera at position (1.2, 0.0, 1.0)...")
-    renderer = StructuredLightRenderer(
-        projector=projector,
-        camera_position=np.array([1.2, 0.0, 1.0]),
-        camera_look_at=np.array([0.0, 0.0, 0.0]),
-        camera_resolution=(640, 480),
-        camera_fov=60.0
-    )
+    if config and 'camera' in config:
+        cam_cfg = config['camera']
+        print(f"3. Setting up camera at position {cam_cfg['position']}...")
+        renderer = StructuredLightRenderer(
+            projector=projector,
+            camera_position=np.array(cam_cfg['position']),
+            camera_look_at=np.array(cam_cfg['look_at']),
+            camera_resolution=tuple(cam_cfg['resolution']),
+            camera_fov=cam_cfg['fov']
+        )
+    else:
+        print("3. Setting up camera at position (1.2, 0.0, 1.0)...")
+        renderer = StructuredLightRenderer(
+            projector=projector,
+            camera_position=np.array([1.2, 0.0, 1.0]),
+            camera_look_at=np.array([0.0, 0.0, 0.0]),
+            camera_resolution=(640, 480),
+            camera_fov=60.0
+        )
 
-    # 4. Generate different patterns and render
-    print("4. Rendering scenes with different patterns...")
+    # Get rendering parameters
+    if config and 'rendering' in config:
+        ambient_light = config['rendering'].get('ambient_light', 0.3)
+        pattern_intensity = config['rendering'].get('pattern_intensity', 0.6)
+    else:
+        ambient_light = 0.3
+        pattern_intensity = 0.6
 
-    patterns = [
-        ('vertical_stripes', projector.create_stripe_pattern(frequency=15, orientation='vertical')),
-        ('horizontal_stripes', projector.create_stripe_pattern(frequency=15, orientation='horizontal')),
-        ('dots', projector.create_dot_pattern(dot_spacing=40, dot_size=4)),
-        ('grid', projector.create_grid_pattern(grid_spacing=50, line_thickness=3))
-    ]
+    # 4. Generate patterns
+    print("4. Generating patterns and rendering...")
+
+    if config and 'patterns' in config:
+        patterns = []
+        for pat_cfg in config['patterns']:
+            pat_type = pat_cfg['type']
+            if 'stripes' in pat_type:
+                orientation = 'vertical' if 'vertical' in pat_type else 'horizontal'
+                pattern = projector.create_stripe_pattern(
+                    frequency=pat_cfg.get('frequency', 15.0),
+                    orientation=orientation,
+                    pattern_type=pat_cfg.get('pattern_type', 'sinusoidal')
+                )
+                patterns.append((pat_type, pattern))
+            elif pat_type == 'dots':
+                pattern = projector.create_dot_pattern(
+                    dot_spacing=pat_cfg.get('dot_spacing', 40),
+                    dot_size=pat_cfg.get('dot_size', 4)
+                )
+                patterns.append((pat_type, pattern))
+            elif pat_type == 'grid':
+                pattern = projector.create_grid_pattern(
+                    grid_spacing=pat_cfg.get('grid_spacing', 50),
+                    line_thickness=pat_cfg.get('line_thickness', 3)
+                )
+                patterns.append((pat_type, pattern))
+    else:
+        patterns = [
+            ('vertical_stripes', projector.create_stripe_pattern(frequency=15, orientation='vertical')),
+            ('horizontal_stripes', projector.create_stripe_pattern(frequency=15, orientation='horizontal')),
+            ('dots', projector.create_dot_pattern(dot_spacing=40, dot_size=4)),
+            ('grid', projector.create_grid_pattern(grid_spacing=50, line_thickness=3))
+        ]
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    for pattern_name, pattern in patterns:
-        print(f"   - Rendering {pattern_name}...")
-        rgb, depth = renderer.render(scene, pattern, ambient_light=0.3, pattern_intensity=0.6)
+    # Determine what to save
+    save_individual = True
+    save_comparison = True
+    if config and 'output' in config:
+        save_individual = config['output'].get('save_individual_patterns', True)
+        save_comparison = config['output'].get('save_comparison', True)
 
-        # Save individual results
-        save_path = output_dir / f"structured_light_3d_{pattern_name}_{timestamp}.png"
-        visualize_results(rgb, depth, save_path=save_path, show=False)
+    # Render patterns
+    if save_individual:
+        for pattern_name, pattern in patterns:
+            print(f"   - Rendering {pattern_name}...")
+            rgb, depth = renderer.render(scene, pattern, ambient_light=ambient_light, pattern_intensity=pattern_intensity)
 
-    # Render one final comparison with display
-    print("\n5. Creating final comparison visualization...")
-    rgb_final, depth_final = renderer.render(scene, patterns[0][1], ambient_light=0.3, pattern_intensity=0.6)
-    final_path = output_dir / f"structured_light_3d_comparison_{timestamp}.png"
-    visualize_results(rgb_final, depth_final, save_path=final_path, show=has_display)
+            # Save individual results
+            save_path = output_dir / f"{output_prefix}_{pattern_name}_{timestamp}.png"
+            visualize_results(rgb, depth, save_path=save_path, show=False)
+
+    # Render final comparison
+    if save_comparison:
+        print("\n5. Creating final comparison visualization...")
+        rgb_final, depth_final = renderer.render(scene, patterns[0][1], ambient_light=ambient_light, pattern_intensity=pattern_intensity)
+        final_path = output_dir / f"{output_prefix}_comparison_{timestamp}.png"
+        visualize_results(rgb_final, depth_final, save_path=final_path, show=has_display)
 
     print("\nGeneration complete!")
     print(f"Output saved to: {output_dir}/")
+    if not config_path:
+        print("\nTip: Create a config file to customize all parameters!")
+        print("Example: python structured_light_3d.py config_example.yaml")
     print("\nNext steps:")
-    print("- Adjust projector and camera positions")
-    print("- Modify pattern parameters")
+    print("- Adjust projector and camera positions in config")
+    print("- Modify box placements and orientations")
     print("- Add custom geometries")
     print("- Integrate with your synthetic data pipeline")
 

@@ -4,3 +4,4 @@ matplotlib>=3.3.0
 pillow>=8.0.0
 trimesh>=3.9.0
 pyrender>=0.1.45
+pyyaml>=6.0
