@@ -29,11 +29,11 @@ patterns:
   - type: "horizontal_stripes"
     frequency: 15.0
     pattern_type: "sinusoidal"
-    display: false
+    display: true
   - type: "dots"
     dot_spacing: 40
     dot_size: 4
-    display: true               # Multiple patterns can be displayed in concatenated view
+    display: false               # Multiple patterns can be displayed in concatenated view
   - type: "grid"
     grid_spacing: 50
     line_thickness: 3

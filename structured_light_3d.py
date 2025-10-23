@@ -485,10 +485,12 @@ class StructuredLightRenderer:
                     continue
 
                 # Back-project from camera to 3D world coordinates
-                # Camera ray in camera space
+                # In OpenGL/PyRender, depth is the distance along the viewing ray (always positive)
+                # Camera coordinate system: X right, Y up, Z back (camera looks along -Z)
+                # So the point in camera space is at (x, y, -depth)
                 x_cam = (u - camera_cx) * d / camera_fx
                 y_cam = (v - camera_cy) * d / camera_fy
-                z_cam = d
+                z_cam = -d  # Negative because camera looks down -Z
 
                 # Transform to world coordinates
                 point_cam = np.array([x_cam, y_cam, z_cam, 1.0])
@@ -498,7 +500,8 @@ class StructuredLightRenderer:
                 point_proj = proj_pose_inv @ point_world
 
                 # Project onto projector image plane
-                if point_proj[2] > 0:  # In front of projector
+                # In OpenGL, projector looks down -Z, so points in front have negative Z
+                if point_proj[2] < 0:  # In front of projector
                     proj_u = proj_fx * point_proj[0] / point_proj[2] + proj_cx
                     proj_v = proj_fy * point_proj[1] / point_proj[2] + proj_cy
 
