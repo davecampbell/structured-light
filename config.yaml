@@ -25,15 +25,19 @@ patterns:
   - type: "vertical_stripes"
     frequency: 15.0
     pattern_type: "sinusoidal"  # or "binary"
+    display: true               # Show this pattern in popup window (can set multiple to true)
   - type: "horizontal_stripes"
     frequency: 15.0
     pattern_type: "sinusoidal"
+    display: false
   - type: "dots"
     dot_spacing: 40
     dot_size: 4
+    display: true               # Multiple patterns can be displayed in concatenated view
   - type: "grid"
     grid_spacing: 50
     line_thickness: 3
+    display: false
 
 # Scene configuration
 scene:
@@ -64,7 +68,7 @@ scene:
   # Random box generation (optional, in addition to manual boxes)
   random_boxes:
     enabled: true               # Set to true to add random boxes
-    count: 5                     # Number of random boxes
+    count: 3                     # Number of random boxes
     size_range:
       min: [0.10, 0.10, 0.10]   # Minimum box size
       max: [0.30, 0.30, 0.30]   # Maximum box size

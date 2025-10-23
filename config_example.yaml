@@ -31,8 +31,8 @@ patterns:
     pattern_type: "sinusoidal"
     display: false
   - type: "dots"
-    dot_spacing: 40
-    dot_size: 4
+    dot_spacing: 25             # Reduced spacing for denser pattern
+    dot_size: 8                 # Increased size for better visibility
     display: true               # Multiple patterns can be displayed in concatenated view
   - type: "grid"
     grid_spacing: 50

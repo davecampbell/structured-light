@@ -437,7 +437,7 @@ class StructuredLightRenderer:
                                 pattern: np.ndarray,
                                 depth: np.ndarray) -> np.ndarray:
         """
-        Simple pattern projection (placeholder for full projective texture mapping).
+        Project pattern onto scene using projective texture mapping.
 
         Args:
             pattern: Projector pattern
@@ -446,15 +446,76 @@ class StructuredLightRenderer:
         Returns:
             Pattern overlay image
         """
-        # Resize pattern to camera resolution
-        pattern_resized = cv2.resize(pattern, self.camera_resolution)
+        h, w = self.camera_resolution[1], self.camera_resolution[0]
+        pattern_rgb = np.zeros((h, w, 3), dtype=np.float32)
 
-        # Create RGB pattern
-        pattern_rgb = np.stack([pattern_resized] * 3, axis=-1)
+        # Create camera intrinsics matrix (simplified)
+        camera_fov_rad = np.radians(self.camera_fov)
+        camera_fx = w / (2 * np.tan(camera_fov_rad / 2))
+        camera_fy = h / (2 * np.tan(camera_fov_rad / 2))
+        camera_cx = w / 2
+        camera_cy = h / 2
 
-        # Mask by depth (no pattern where no geometry)
-        valid_mask = (depth > 0).astype(np.float32)
-        pattern_rgb = pattern_rgb * valid_mask[:, :, np.newaxis]
+        # Camera pose
+        camera_pose = self._look_at_matrix(self.camera_position, self.camera_look_at)
+        camera_pose_inv = np.linalg.inv(camera_pose)
+
+        # Projector intrinsics (simplified)
+        proj_fov_rad = np.radians(self.projector.fov)
+        proj_w, proj_h = self.projector.resolution
+        proj_fx = proj_w / (2 * np.tan(proj_fov_rad / 2))
+        proj_fy = proj_h / (2 * np.tan(proj_fov_rad / 2))
+        proj_cx = proj_w / 2
+        proj_cy = proj_h / 2
+
+        # Projector pose
+        proj_pose = self._look_at_matrix(self.projector.position, self.projector.look_at)
+        proj_pose_inv = np.linalg.inv(proj_pose)
+
+        # For each camera pixel, project to 3D, then to projector space
+        for v in range(h):
+            for u in range(w):
+                d = depth[v, u]
+                if d <= 0:
+                    continue
+
+                # Back-project from camera to 3D world coordinates
+                # Camera ray in camera space
+                x_cam = (u - camera_cx) * d / camera_fx
+                y_cam = (v - camera_cy) * d / camera_fy
+                z_cam = d
+
+                # Transform to world coordinates
+                point_cam = np.array([x_cam, y_cam, z_cam, 1.0])
+                point_world = camera_pose @ point_cam
+
+                # Transform to projector coordinates
+                point_proj = proj_pose_inv @ point_world
+
+                # Project onto projector image plane
+                if point_proj[2] > 0:  # In front of projector
+                    proj_u = proj_fx * point_proj[0] / point_proj[2] + proj_cx
+                    proj_v = proj_fy * point_proj[1] / point_proj[2] + proj_cy
+
+                    # Bilinear interpolation for smoother sampling
+                    if 0 <= proj_u < proj_w - 1 and 0 <= proj_v < proj_h - 1:
+                        u0 = int(np.floor(proj_u))
+                        v0 = int(np.floor(proj_v))
+                        u1 = u0 + 1
+                        v1 = v0 + 1
+
+                        # Interpolation weights
+                        wu = proj_u - u0
+                        wv = proj_v - v0
+
+                        # Bilinear interpolation
+                        pattern_value = (
+                            pattern[v0, u0] * (1 - wu) * (1 - wv) +
+                            pattern[v0, u1] * wu * (1 - wv) +
+                            pattern[v1, u0] * (1 - wu) * wv +
+                            pattern[v1, u1] * wu * wv
+                        )
+                        pattern_rgb[v, u, :] = pattern_value
 
         return pattern_rgb
 
