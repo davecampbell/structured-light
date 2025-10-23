@@ -329,7 +329,8 @@ class StructuredLightRenderer:
                scene: Scene3D,
                pattern: np.ndarray,
                ambient_light: float = 0.3,
-               pattern_intensity: float = 0.7) -> Tuple[np.ndarray, np.ndarray]:
+               pattern_intensity: float = 0.7,
+               use_forward_projection: bool = False) -> Tuple[np.ndarray, np.ndarray]:
         """
         Render the scene with structured light.
 
@@ -338,6 +339,7 @@ class StructuredLightRenderer:
             pattern: Pattern to project from projector
             ambient_light: Ambient light intensity [0, 1]
             pattern_intensity: Projected pattern intensity [0, 1]
+            use_forward_projection: Use forward projection (better for sparse patterns)
 
         Returns:
             Tuple of (rgb_image, depth_map)
@@ -382,9 +384,11 @@ class StructuredLightRenderer:
         color, depth = renderer.render(pr_scene)
         renderer.delete()
 
-        # Project pattern onto scene (simplified approach)
-        # In a full implementation, this would use projective texture mapping
-        pattern_overlay = self._project_pattern_simple(pattern, depth)
+        # Project pattern onto scene
+        if use_forward_projection:
+            pattern_overlay = self._project_pattern_forward(pattern, scene, pr_scene)
+        else:
+            pattern_overlay = self._project_pattern_backward(pattern, depth)
 
         # Combine base rendering with pattern
         color_float = color.astype(np.float32) / 255.0
@@ -433,11 +437,12 @@ class StructuredLightRenderer:
 
         return matrix
 
-    def _project_pattern_simple(self,
-                                pattern: np.ndarray,
-                                depth: np.ndarray) -> np.ndarray:
+    def _project_pattern_backward(self,
+                                  pattern: np.ndarray,
+                                  depth: np.ndarray) -> np.ndarray:
         """
-        Project pattern onto scene using projective texture mapping.
+        Project pattern onto scene using backward (pull) projective texture mapping.
+        Good for continuous patterns like stripes.
 
         Args:
             pattern: Projector pattern
@@ -517,6 +522,111 @@ class StructuredLightRenderer:
                         )
                         pattern_rgb[v, u, :] = pattern_value
 
+        return pattern_rgb
+
+    def _project_pattern_forward(self,
+                                 pattern: np.ndarray,
+                                 scene: Scene3D,
+                                 pr_scene: pyrender.Scene) -> np.ndarray:
+        """
+        Project pattern onto scene using forward (push) projection.
+        Better for sparse patterns like dots and grids.
+
+        Args:
+            pattern: Projector pattern
+            scene: Scene3D object
+            pr_scene: Pyrender scene (for depth rendering from projector)
+
+        Returns:
+            Pattern overlay image
+        """
+        h, w = self.camera_resolution[1], self.camera_resolution[0]
+        pattern_rgb = np.zeros((h, w, 3), dtype=np.float32)
+
+        # Render depth from projector viewpoint
+        proj_camera = pyrender.PerspectiveCamera(
+            yfov=np.radians(self.projector.fov),
+            aspectRatio=self.projector.resolution[0] / self.projector.resolution[1]
+        )
+        proj_camera_pose = self._look_at_matrix(self.projector.position, self.projector.look_at)
+
+        # Create temporary scene for projector view
+        temp_scene = pyrender.Scene(ambient_light=[0.1, 0.1, 0.1])
+        for mesh, pose in zip(scene.meshes, scene.mesh_poses):
+            pr_mesh = pyrender.Mesh.from_trimesh(mesh)
+            temp_scene.add(pr_mesh, pose=pose)
+        temp_scene.add(proj_camera, pose=proj_camera_pose)
+
+        # Render depth from projector
+        proj_renderer = pyrender.OffscreenRenderer(
+            viewport_width=self.projector.resolution[0],
+            viewport_height=self.projector.resolution[1]
+        )
+        _, proj_depth = proj_renderer.render(temp_scene)
+        proj_renderer.delete()
+
+        # Projector intrinsics
+        proj_fov_rad = np.radians(self.projector.fov)
+        proj_w, proj_h = self.projector.resolution
+        proj_fx = proj_w / (2 * np.tan(proj_fov_rad / 2))
+        proj_fy = proj_h / (2 * np.tan(proj_fov_rad / 2))
+        proj_cx = proj_w / 2
+        proj_cy = proj_h / 2
+
+        # Camera intrinsics
+        camera_fov_rad = np.radians(self.camera_fov)
+        camera_fx = w / (2 * np.tan(camera_fov_rad / 2))
+        camera_fy = h / (2 * np.tan(camera_fov_rad / 2))
+        camera_cx = w / 2
+        camera_cy = h / 2
+
+        # Camera and projector poses
+        camera_pose = self._look_at_matrix(self.camera_position, self.camera_look_at)
+        camera_pose_inv = np.linalg.inv(camera_pose)
+        proj_pose_inv = np.linalg.inv(proj_camera_pose)
+
+        # For each projector pixel (forward projection)
+        for v_proj in range(proj_h):
+            for u_proj in range(proj_w):
+                d_proj = proj_depth[v_proj, u_proj]
+                if d_proj <= 0:
+                    continue
+
+                # Get pattern value at this projector pixel
+                pattern_value = pattern[v_proj, u_proj]
+                if pattern_value < 0.01:  # Skip dark pixels for efficiency
+                    continue
+
+                # Back-project from projector to 3D world
+                x_proj = (u_proj - proj_cx) * d_proj / proj_fx
+                y_proj = (v_proj - proj_cy) * d_proj / proj_fy
+                z_proj = d_proj
+
+                # Transform to world coordinates
+                point_proj_space = np.array([x_proj, y_proj, z_proj, 1.0])
+                point_world = proj_camera_pose @ point_proj_space
+
+                # Transform to camera coordinates
+                point_cam = camera_pose_inv @ point_world
+
+                # Project onto camera image plane
+                if point_cam[2] > 0:  # In front of camera
+                    cam_u = camera_fx * point_cam[0] / point_cam[2] + camera_cx
+                    cam_v = camera_fy * point_cam[1] / point_cam[2] + camera_cy
+
+                    # Draw pattern value at camera pixel (with splatting)
+                    cam_u_int = int(round(cam_u))
+                    cam_v_int = int(round(cam_v))
+
+                    if 0 <= cam_u_int < w and 0 <= cam_v_int < h:
+                        # Max operation for overlapping projections
+                        pattern_rgb[cam_v_int, cam_u_int, :] = max(
+                            pattern_rgb[cam_v_int, cam_u_int, 0],
+                            pattern_value
+                        )
+
+        # NOTE: Forward projection currently has coordinate transform issues
+        # Use backward projection (stripes) for now, which works correctly
         return pattern_rgb
 
 
@@ -821,7 +931,11 @@ def main():
     if save_individual:
         for pattern_name, pattern in patterns:
             print(f"   - Rendering {pattern_name}...")
-            rgb, depth = renderer.render(scene, pattern, ambient_light=ambient_light, pattern_intensity=pattern_intensity)
+            # Note: Forward projection has coord transform issues, using backward for all patterns
+            # Stripe patterns work well with backward projection
+            rgb, depth = renderer.render(scene, pattern, ambient_light=ambient_light,
+                                        pattern_intensity=pattern_intensity,
+                                        use_forward_projection=False)
 
             # Save individual results
             save_path = output_dir / f"{output_prefix}_{pattern_name}_{timestamp}.png"
@@ -841,7 +955,9 @@ def main():
             pattern_name, pattern = patterns[idx]
             pattern_names.append(pattern_name)
             print(f"\n5. Rendering comparison for: {pattern_name}...")
-            rgb, depth = renderer.render(scene, pattern, ambient_light=ambient_light, pattern_intensity=pattern_intensity)
+            rgb, depth = renderer.render(scene, pattern, ambient_light=ambient_light,
+                                        pattern_intensity=pattern_intensity,
+                                        use_forward_projection=False)
             display_results.append((pattern_name, rgb, depth))
 
         # Save and show the comparison
