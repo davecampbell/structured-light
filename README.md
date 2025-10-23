@@ -71,16 +71,24 @@ This will:
 
 ### Quick Start: 3D Simulator
 
+**Without config (uses defaults):**
 ```bash
 python structured_light_3d.py
 ```
 
+**With config file (recommended):**
+```bash
+python structured_light_3d.py config_example.yaml
+```
+
 This will:
-1. Create a 3D scene with random boxes on a ground plane
-2. Position projector at (0.5, -0.8, 1.5) and camera at (1.2, 0.0, 1.0)
-3. Render the scene with multiple structured light patterns
-4. Generate both RGB and depth images from camera viewpoint
-5. Save visualizations to `output/structured_light_3d_*.png`
+1. Load configuration from YAML file (or use defaults)
+2. Create projector at specified position
+3. Build 3D scene with boxes at configured positions and orientations
+4. Setup camera at specified viewpoint
+5. Render the scene with multiple structured light patterns
+6. Generate both RGB and depth images from camera viewpoint
+7. Save visualizations to `output/structured_light_3d_*.png`
 
 ### Programmatic Usage: 2D Pattern Generator
 
@@ -167,6 +175,89 @@ rgb_image, depth_map = renderer.render(
 
 # rgb_image and depth_map are now ready to use for training
 ```
+
+## Configuration File (3D Simulator)
+
+The 3D simulator supports comprehensive YAML configuration for all parameters. See `config_example.yaml` for a full example.
+
+### Configuration Structure
+
+```yaml
+# Projector position and settings
+projector:
+  position: [x, y, z]        # 3D position in meters
+  look_at: [x, y, z]         # Point to aim at
+  fov: 50.0                  # Field of view in degrees
+  resolution: [1024, 768]    # Pattern resolution
+
+# Camera position and settings
+camera:
+  position: [x, y, z]        # 3D position in meters
+  look_at: [x, y, z]         # Point to aim at
+  fov: 60.0                  # Field of view in degrees
+  resolution: [640, 480]     # Image resolution
+
+# Scene configuration
+scene:
+  ground_plane:
+    enabled: true
+    size: 3.0                # Size in meters
+    height: -0.5             # Z-coordinate
+    color: [200, 200, 200]   # RGB color
+
+  # Manual box placement with precise control
+  boxes:
+    - size: [0.25, 0.25, 0.25]              # [width, depth, height]
+      position: [0.1, 0.1, 0.125]           # [x, y, z] center
+      orientation: [0.0, 0.0, 45.0]         # [roll, pitch, yaw] degrees
+      color: [150, 100, 100]                # RGB or null for random
+
+  # Random box generation (optional)
+  random_boxes:
+    enabled: false
+    count: 5
+    size_range:
+      min: [0.10, 0.10, 0.10]
+      max: [0.30, 0.30, 0.30]
+    position_bounds:
+      x: [-0.5, 0.5]
+      y: [-0.5, 0.5]
+      z: [0.0, 0.4]
+    orientation_range:
+      roll: [0.0, 360.0]
+      pitch: [0.0, 360.0]
+      yaw: [0.0, 360.0]
+
+# Pattern types to generate
+patterns:
+  - type: "vertical_stripes"
+    frequency: 15.0
+    pattern_type: "sinusoidal"  # or "binary"
+  - type: "dots"
+    dot_spacing: 40
+    dot_size: 4
+
+# Rendering parameters
+rendering:
+  ambient_light: 0.3
+  pattern_intensity: 0.6
+
+# Output settings
+output:
+  directory: "output"
+  prefix: "structured_light_3d"
+  save_individual_patterns: true
+  save_comparison: true
+```
+
+### Key Features:
+
+- **Projector & Camera**: Full 3D positioning with look-at targets
+- **Box Placement**: Precise control over position and orientation (roll, pitch, yaw)
+- **Euler Angles**: Intuitive rotation specification in degrees
+- **Random Generation**: Optional random box placement with configurable ranges
+- **Pattern Control**: Configure which patterns to generate and their parameters
+- **Output Control**: Customize output directory, filename prefix, and what to save
 
 ## Output
 
