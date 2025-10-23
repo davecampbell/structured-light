@@ -25,7 +25,7 @@ patterns:
   - type: "vertical_stripes"
     frequency: 15.0
     pattern_type: "sinusoidal"  # or "binary"
-    display: true               # Show this pattern in popup window (only one should be true)
+    display: true               # Show this pattern in popup window (can set multiple to true)
   - type: "horizontal_stripes"
     frequency: 15.0
     pattern_type: "sinusoidal"
@@ -33,7 +33,7 @@ patterns:
   - type: "dots"
     dot_spacing: 40
     dot_size: 4
-    display: false
+    display: true               # Multiple patterns can be displayed in concatenated view
   - type: "grid"
     grid_spacing: 50
     line_thickness: 3

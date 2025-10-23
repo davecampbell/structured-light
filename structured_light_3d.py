@@ -569,6 +569,46 @@ def visualize_results(rgb_image: np.ndarray,
         plt.close(fig)
 
 
+def visualize_multiple_results(results: List[Tuple[str, np.ndarray, np.ndarray]],
+                               save_path: Optional[Path] = None,
+                               show: bool = True) -> None:
+    """
+    Visualize multiple rendering results in a grid.
+
+    Args:
+        results: List of (pattern_name, rgb_image, depth_map) tuples
+        save_path: Path to save figure (optional)
+        show: Whether to show the plot
+    """
+    num_patterns = len(results)
+    fig, axes = plt.subplots(num_patterns, 2, figsize=(12, 5 * num_patterns))
+    fig.suptitle('3D Structured Light Simulation - Multiple Patterns', fontsize=16)
+
+    # Handle single pattern case
+    if num_patterns == 1:
+        axes = [axes]
+
+    for idx, (pattern_name, rgb_image, depth_map) in enumerate(results):
+        axes[idx][0].imshow(rgb_image)
+        axes[idx][0].set_title(f'{pattern_name} - RGB with Structured Light')
+        axes[idx][0].axis('off')
+
+        axes[idx][1].imshow(depth_map, cmap='viridis')
+        axes[idx][1].set_title(f'{pattern_name} - Depth Map')
+        axes[idx][1].axis('off')
+
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        print(f"Saved multi-pattern visualization to: {save_path}")
+
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+
+
 def main():
     """
     Main function demonstrating 3D structured light simulation.
@@ -668,7 +708,7 @@ def main():
     # 4. Generate patterns
     print("4. Generating patterns and rendering...")
 
-    display_pattern_idx = None  # Track which pattern to display
+    display_pattern_indices = []  # Track which patterns to display
     if config and 'patterns' in config:
         patterns = []
         for idx, pat_cfg in enumerate(config['patterns']):
@@ -676,7 +716,7 @@ def main():
 
             # Check if this pattern should be displayed
             if pat_cfg.get('display', False):
-                display_pattern_idx = idx
+                display_pattern_indices.append(idx)
 
             if 'stripes' in pat_type:
                 orientation = 'vertical' if 'vertical' in pat_type else 'horizontal'
@@ -705,7 +745,7 @@ def main():
             ('dots', projector.create_dot_pattern(dot_spacing=40, dot_size=4)),
             ('grid', projector.create_grid_pattern(grid_spacing=50, line_thickness=3))
         ]
-        display_pattern_idx = 0  # Default to first pattern
+        display_pattern_indices = [0]  # Default to first pattern
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -726,17 +766,34 @@ def main():
             save_path = output_dir / f"{output_prefix}_{pattern_name}_{timestamp}.png"
             visualize_results(rgb, depth, save_path=save_path, show=False)
 
-    # Render final comparison
+    # Render final comparison (with multiple patterns if multiple display flags set)
     if save_comparison:
-        # Use the pattern marked for display, or default to first pattern
-        if display_pattern_idx is None:
-            display_pattern_idx = 0
+        # Use patterns marked for display, or default to first pattern
+        if not display_pattern_indices:
+            display_pattern_indices = [0]
 
-        display_pattern_name, display_pattern = patterns[display_pattern_idx]
-        print(f"\n5. Creating final comparison visualization (displaying: {display_pattern_name})...")
-        rgb_final, depth_final = renderer.render(scene, display_pattern, ambient_light=ambient_light, pattern_intensity=pattern_intensity)
+        # Render all patterns marked for display
+        display_results = []
+        pattern_names = []
+
+        for idx in display_pattern_indices:
+            pattern_name, pattern = patterns[idx]
+            pattern_names.append(pattern_name)
+            print(f"\n5. Rendering comparison for: {pattern_name}...")
+            rgb, depth = renderer.render(scene, pattern, ambient_light=ambient_light, pattern_intensity=pattern_intensity)
+            display_results.append((pattern_name, rgb, depth))
+
+        # Save and show the comparison
         final_path = output_dir / f"{output_prefix}_comparison_{timestamp}.png"
-        visualize_results(rgb_final, depth_final, save_path=final_path, show=has_display)
+
+        if len(display_results) == 1:
+            # Single pattern - use simple visualization
+            print(f"\nCreating comparison visualization (displaying: {pattern_names[0]})...")
+            visualize_results(display_results[0][1], display_results[0][2], save_path=final_path, show=has_display)
+        else:
+            # Multiple patterns - use grid visualization
+            print(f"\nCreating multi-pattern comparison visualization (displaying: {', '.join(pattern_names)})...")
+            visualize_multiple_results(display_results, save_path=final_path, show=has_display)
 
     print("\nGeneration complete!")
     print(f"Output saved to: {output_dir}/")
