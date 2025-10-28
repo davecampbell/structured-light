@@ -289,22 +289,114 @@ result = pattern_projector.project_pattern_backward(pattern, depth_map)
 
 ### Depth Map I/O
 
+The system supports two formats for external depth maps:
+
+#### 16-bit PNG Format (Recommended for compatibility)
+
 ```python
 from structured_light_from_depth import DepthMapIO
 
 # Save depth as 16-bit PNG
+# depth_map should be in meters (float array)
 DepthMapIO.save_depth_png(depth_map, 'output/depth.png', max_depth=5.0)
 
 # Load depth from PNG
+# Returns depth in meters (float array)
 depth_map = DepthMapIO.load_depth_png('output/depth.png', max_depth=5.0)
+```
 
-# Save/load as numpy array
+**Properties:**
+- Format: Grayscale PNG, 16-bit unsigned integer
+- Scaling: 0 → 0 meters, 65535 → max_depth meters
+- Good for sharing with other tools and visualization
+
+#### Numpy Array Format (.npy)
+
+```python
+# Save depth as numpy array
+# No scaling - preserves exact values in meters
 DepthMapIO.save_depth_npy(depth_map, 'output/depth.npy')
-depth_map = DepthMapIO.load_depth_npy('output/depth.npy')
 
-# Visualize depth with color
+# Load depth from numpy array
+depth_map = DepthMapIO.load_depth_npy('output/depth.npy')
+```
+
+**Properties:**
+- Format: Raw numpy array (float32 or float64)
+- No scaling - exact precision preserved
+- Best for Python-only workflows
+
+#### Depth Map Requirements
+
+External depth maps must have these properties:
+
+- **Shape**: (height, width) - 2D array matching camera resolution
+- **Units**: Meters (distance from camera)
+- **Values**:
+  - 0 or negative = invalid/no depth
+  - Positive = valid depth in meters
+- **Data type**: float32 or float64
+
+#### Visualization
+
+```python
+# Create color-coded visualization of depth
 depth_colored = DepthMapIO.visualize_depth(depth_map)
 ```
+
+#### Example: Using Intel RealSense
+
+```python
+import pyrealsense2 as rs
+import numpy as np
+from structured_light_from_depth import (
+    CameraCalibration, ProjectorCalibration,
+    PatternProjector, DepthMapIO, create_stripe_pattern
+)
+
+# Get depth from RealSense
+pipeline = rs.pipeline()
+config = rs.config()
+config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+pipeline.start(config)
+
+frames = pipeline.wait_for_frames()
+depth_frame = frames.get_depth_frame()
+depth_map = np.asanyarray(depth_frame.get_data()).astype(np.float32)
+
+# RealSense depth is in millimeters, convert to meters
+depth_map = depth_map / 1000.0
+
+# Save for later use
+DepthMapIO.save_depth_npy(depth_map, 'realsense_depth.npy')
+
+# Define calibrations (must match your hardware setup!)
+camera_calib = CameraCalibration(
+    position=np.array([1.2, 0.0, 1.0]),
+    look_at=np.array([0.0, 0.0, 0.0]),
+    fov=60.0,
+    resolution=(640, 480)
+)
+
+projector_calib = ProjectorCalibration(
+    position=np.array([0.5, -0.8, 1.5]),
+    look_at=np.array([0.0, 0.0, 0.0]),
+    fov=50.0,
+    resolution=(1024, 768)
+)
+
+# Project pattern onto real depth data
+pattern_projector = PatternProjector(camera_calib, projector_calib)
+pattern = create_stripe_pattern(projector_calib.resolution, frequency=15)
+result = pattern_projector.project_pattern_backward(pattern, depth_map)
+```
+
+#### Format Comparison
+
+| Format | Best For |
+|--------|----------|
+| **16-bit PNG** | Sharing with other tools, visualization, storage efficiency |
+| **Numpy .npy** | Python-only workflow, exact precision, frequent loading/saving |
 
 ### When to Use Each Approach
 
