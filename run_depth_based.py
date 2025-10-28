@@ -96,15 +96,23 @@ def main():
             {'type': 'grid', 'grid_spacing': 50, 'line_thickness': 2, 'display': True}
         ]
 
+    # Filter patterns by display flag
+    patterns_to_generate = [p for p in pattern_configs if p.get('display', True)]
+
+    if not patterns_to_generate:
+        print("\nNo patterns enabled (all have display: false)")
+        print("Set display: true in config to generate patterns")
+        return
+
     # Project patterns
-    print(f"\nProjecting {len(pattern_configs)} patterns...")
+    print(f"\nProjecting {len(patterns_to_generate)} patterns (skipping {len(pattern_configs) - len(patterns_to_generate)} with display: false)...")
     results = []
     display_results = []
     display_titles = []
 
-    for i, pattern_config in enumerate(pattern_configs):
+    for i, pattern_config in enumerate(patterns_to_generate):
         pattern_type = pattern_config['type']
-        print(f"  [{i+1}/{len(pattern_configs)}] {pattern_type}...", end=' ')
+        print(f"  [{i+1}/{len(patterns_to_generate)}] {pattern_type}...", end=' ')
 
         # Create pattern
         if 'stripe' in pattern_type:
@@ -158,10 +166,9 @@ def main():
         else:
             print("✓")
 
-        # Add to display if enabled
-        if pattern_config.get('display', True):
-            display_results.append(result)
-            display_titles.append(pattern_type.replace('_', ' ').title())
+        # Add to display (all patterns in this loop are already filtered for display: true)
+        display_results.append(result)
+        display_titles.append(pattern_type.replace('_', ' ').title())
 
     # Create comparison visualization if multiple patterns to display
     if len(display_results) > 1 and config.get('output', {}).get('save_comparison', True):
