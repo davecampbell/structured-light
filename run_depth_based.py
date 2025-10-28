@@ -74,8 +74,8 @@ def main():
     output_dir.mkdir(exist_ok=True)
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 
-    depth_npy_path = output_dir / f'depth_map_{timestamp}.npy'
-    depth_png_path = output_dir / f'depth_map_{timestamp}.png'
+    depth_npy_path = output_dir / f'{timestamp}_depth_map.npy'
+    depth_png_path = output_dir / f'{timestamp}_depth_map.png'
     DepthMapIO.save_depth_npy(depth_map, str(depth_npy_path))
     DepthMapIO.save_depth_png(depth_map, str(depth_png_path), max_depth=5.0)
     print(f"✓ Saved depth: {depth_npy_path}, {depth_png_path}")
@@ -151,7 +151,7 @@ def main():
 
         # Save individual pattern if configured
         if config.get('output', {}).get('save_individual_patterns', True):
-            filename = f"{pattern_type}_{timestamp}.png"
+            filename = f"{timestamp}_{pattern_type}.png"
             filepath = output_dir / filename
             plt.imsave(str(filepath), result)
             print(f"✓ Saved to {filepath}")
@@ -197,7 +197,7 @@ def main():
 
         plt.tight_layout()
 
-        comparison_path = output_dir / f'comparison_{timestamp}.png'
+        comparison_path = output_dir / f'{timestamp}_comparison.png'
         plt.savefig(str(comparison_path), dpi=150, bbox_inches='tight')
         print(f"✓ Saved comparison: {comparison_path}")
 
