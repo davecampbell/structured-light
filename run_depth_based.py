@@ -6,11 +6,14 @@ Command line interface for the depth-based structured light system.
 Loads configuration from YAML file and generates patterns using only depth maps.
 
 Usage:
-    python run_depth_based.py [config_file]
+    python run_depth_based.py [config_file] [--depth DEPTH_FILE]
     python run_depth_based.py config_example.yaml
+    python run_depth_based.py config_example.yaml --depth my_depth.npy
+    python run_depth_based.py config_example.yaml --depth my_depth.png --max-depth 5.0
 """
 
 import sys
+import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
@@ -29,10 +32,30 @@ from structured_light_3d import Scene3D, build_scene_from_config, load_config
 
 def main():
     # Parse command line arguments
-    if len(sys.argv) > 1:
-        config_path = sys.argv[1]
-    else:
-        config_path = 'config_example.yaml'
+    parser = argparse.ArgumentParser(
+        description='Depth-Based Structured Light Projection',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Generate depth from config geometry
+  python run_depth_based.py config_example.yaml
+
+  # Use external depth map (numpy)
+  python run_depth_based.py config_example.yaml --depth my_depth.npy
+
+  # Use external depth map (PNG)
+  python run_depth_based.py config_example.yaml --depth my_depth.png --max-depth 5.0
+        """
+    )
+    parser.add_argument('config', nargs='?', default='config_example.yaml',
+                       help='YAML configuration file (default: config_example.yaml)')
+    parser.add_argument('--depth', type=str,
+                       help='External depth map file (.npy or .png)')
+    parser.add_argument('--max-depth', type=float, default=5.0,
+                       help='Max depth for PNG scaling (default: 5.0 meters)')
+
+    args = parser.parse_args()
+    config_path = args.config
 
     print("=" * 70)
     print("Depth-Based Structured Light Projection")
@@ -42,9 +65,7 @@ def main():
     # Check if config file exists
     if not Path(config_path).exists():
         print(f"\nError: Config file '{config_path}' not found!")
-        print("\nUsage:")
-        print(f"  python {sys.argv[0]} [config_file]")
-        print(f"  python {sys.argv[0]} config_example.yaml")
+        parser.print_help()
         sys.exit(1)
 
     # Load full config (for scene and patterns)
@@ -57,28 +78,57 @@ def main():
     print(f"✓ Projector: position={projector_calib.position}, fov={projector_calib.fov}°, "
           f"resolution={projector_calib.resolution}")
 
-    # Build scene from config
-    print("\nBuilding 3D scene from config...")
-    scene = build_scene_from_config(config)
-    print(f"✓ Scene created with {len(scene.meshes)} meshes")
+    # Load or generate depth map
+    if args.depth:
+        # Load external depth map
+        print(f"\nLoading external depth map from: {args.depth}")
 
-    # Generate depth map
-    print("\nGenerating depth map...")
-    depth_generator = DepthMapGenerator(camera_calib)
-    rgb_base, depth_map = depth_generator.render_depth(scene)
-    print(f"✓ Depth map: {depth_map.shape}")
-    print(f"  Depth range: {depth_map[depth_map > 0].min():.3f} - {depth_map.max():.3f} meters")
+        if not Path(args.depth).exists():
+            print(f"Error: Depth file '{args.depth}' not found!")
+            sys.exit(1)
 
-    # Save depth map
+        depth_path = Path(args.depth)
+        if depth_path.suffix == '.npy':
+            depth_map = DepthMapIO.load_depth_npy(str(depth_path))
+            print(f"✓ Loaded numpy depth map: {depth_map.shape}")
+        elif depth_path.suffix == '.png':
+            depth_map = DepthMapIO.load_depth_png(str(depth_path), max_depth=args.max_depth)
+            print(f"✓ Loaded PNG depth map: {depth_map.shape} (max_depth={args.max_depth}m)")
+        else:
+            print(f"Error: Unsupported depth format '{depth_path.suffix}'")
+            print("Supported formats: .npy, .png")
+            sys.exit(1)
+
+        print(f"  Depth range: {depth_map[depth_map > 0].min():.3f} - {depth_map.max():.3f} meters")
+
+        # Create a simple gray base image
+        rgb_base = np.ones((depth_map.shape[0], depth_map.shape[1], 3), dtype=np.uint8) * 128
+
+    else:
+        # Generate depth from geometry
+        print("\nBuilding 3D scene from config...")
+        scene = build_scene_from_config(config)
+        print(f"✓ Scene created with {len(scene.meshes)} meshes")
+
+        print("\nGenerating depth map from geometry...")
+        depth_generator = DepthMapGenerator(camera_calib)
+        rgb_base, depth_map = depth_generator.render_depth(scene)
+        print(f"✓ Depth map: {depth_map.shape}")
+        print(f"  Depth range: {depth_map[depth_map > 0].min():.3f} - {depth_map.max():.3f} meters")
+
+    # Save depth map (only if generated, not if loaded from external)
     output_dir = Path(config.get('output', {}).get('directory', 'output'))
     output_dir.mkdir(exist_ok=True)
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 
-    depth_npy_path = output_dir / f'{timestamp}_depth_map.npy'
-    depth_png_path = output_dir / f'{timestamp}_depth_map.png'
-    DepthMapIO.save_depth_npy(depth_map, str(depth_npy_path))
-    DepthMapIO.save_depth_png(depth_map, str(depth_png_path), max_depth=5.0)
-    print(f"✓ Saved depth: {depth_npy_path}, {depth_png_path}")
+    if not args.depth:
+        depth_npy_path = output_dir / f'{timestamp}_depth_map.npy'
+        depth_png_path = output_dir / f'{timestamp}_depth_map.png'
+        DepthMapIO.save_depth_npy(depth_map, str(depth_npy_path))
+        DepthMapIO.save_depth_png(depth_map, str(depth_png_path), max_depth=5.0)
+        print(f"✓ Saved generated depth: {depth_npy_path}, {depth_png_path}")
+    else:
+        print(f"✓ Using external depth (not saving duplicate)")
 
     # Create pattern projector
     print("\nCreating pattern projector...")
@@ -212,7 +262,10 @@ def main():
     print("\n" + "=" * 70)
     print("Summary")
     print("=" * 70)
-    print(f"Approach: Depth-based projection (no geometry required)")
+    if args.depth:
+        print(f"Depth source: External file ({args.depth})")
+    else:
+        print(f"Depth source: Generated from config geometry")
     print(f"Depth map: {depth_map.shape}")
     print(f"Patterns generated: {len(results)}")
     print(f"Output directory: {output_dir}")
