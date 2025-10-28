@@ -180,14 +180,29 @@ rgb_image, depth_map = renderer.render(
 
 ### Quick Start: Depth-Based Projector
 
-**With config file (recommended):**
+**Generate depth from config geometry:**
 ```bash
 python run_depth_based.py config_example.yaml
+```
+
+**Use external depth map (numpy):**
+```bash
+python run_depth_based.py config_example.yaml --depth my_depth.npy
+```
+
+**Use external depth map (PNG with scaling):**
+```bash
+python run_depth_based.py config_example.yaml --depth my_depth.png --max-depth 5.0
 ```
 
 **With default config:**
 ```bash
 python run_depth_based.py
+```
+
+**Get help:**
+```bash
+python run_depth_based.py --help
 ```
 
 **Run examples:**
@@ -197,9 +212,9 @@ python example_depth_based.py
 
 The main script will:
 1. Load configuration from YAML file
-2. Generate depth map from scene geometry (or load external depth)
-3. Project all configured patterns
-4. Save individual patterns, depth maps, and comparison visualization
+2. Load external depth map OR generate from scene geometry
+3. Project all configured patterns (respects `display: true/false`)
+4. Save individual patterns and comparison visualization
 
 The example script will run three demos:
 1. Generate depth from geometry and project patterns
