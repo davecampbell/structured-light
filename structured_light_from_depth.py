@@ -426,3 +426,39 @@ def create_grid_pattern(resolution: Tuple[int, int],
     )
 
     return temp_projector.create_grid_pattern(grid_spacing, line_thickness)
+
+
+def load_calibrations_from_config(config_path: str) -> Tuple[CameraCalibration, ProjectorCalibration]:
+    """
+    Load camera and projector calibrations from YAML config file.
+
+    Compatible with the config format from structured_light_3d.py.
+
+    Args:
+        config_path: Path to YAML configuration file
+
+    Returns:
+        Tuple of (CameraCalibration, ProjectorCalibration)
+    """
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+
+    # Load camera calibration
+    camera_config = config['camera']
+    camera_calib = CameraCalibration(
+        position=np.array(camera_config['position']),
+        look_at=np.array(camera_config['look_at']),
+        fov=camera_config['fov'],
+        resolution=tuple(camera_config['resolution'])
+    )
+
+    # Load projector calibration
+    projector_config = config['projector']
+    projector_calib = ProjectorCalibration(
+        position=np.array(projector_config['position']),
+        look_at=np.array(projector_config['look_at']),
+        fov=projector_config['fov'],
+        resolution=tuple(projector_config['resolution'])
+    )
+
+    return camera_calib, projector_calib
