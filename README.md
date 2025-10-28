@@ -2,24 +2,26 @@
 
 A Python tool for generating synthetic structured light patterns overlaid on images with depth data. This is designed for data augmentation to improve vision models for robotic grasping tasks.
 
-## Two Approaches Available
+## Three Approaches Available
 
 ### 1. Simple 2D Pattern Generator (`structured_light_generator.py`)
 Quick depth-based pattern overlay for existing images.
 
-![Structured Light Patterns](output/structured_light_patterns_20251022_083755.png)
-
-### 2. Full 3D Simulator (`structured_light_3d.py`) **NEW!**
+### 2. Full 3D Simulator (`structured_light_3d.py`)
 Realistic 3D scene rendering with projector and camera at different positions.
 
-![3D Structured Light](output/structured_light_3d_vertical_stripes_20251023_115204.png)
+### 3. Depth-Map-Based Projector (`structured_light_from_depth.py`) **NEW!**
+Decouple pattern projection from geometry - works with any depth map source!
+
+![Depth-Based Patterns](output/synthetic_depth_patterns.png)
 
 ## Overview
 
-Structured light is a 3D scanning technique that projects known patterns onto objects and analyzes the deformation to extract depth information. This tool provides two ways to generate synthetic structured light training data:
+Structured light is a 3D scanning technique that projects known patterns onto objects and analyzes the deformation to extract depth information. This tool provides three ways to generate synthetic structured light training data:
 
 1. **2D Pattern Generator**: Fast pattern overlay onto existing depth maps
 2. **3D Simulator**: Full geometric simulation with configurable projector and camera positions
+3. **Depth-Based Projector**: Pattern projection using only depth maps (works with real depth cameras!)
 
 ## Features
 
@@ -175,6 +177,125 @@ rgb_image, depth_map = renderer.render(
 
 # rgb_image and depth_map are now ready to use for training
 ```
+
+### Quick Start: Depth-Based Projector
+
+```bash
+python example_depth_based.py
+```
+
+This will run three examples:
+1. Generate depth from geometry and project patterns
+2. Load external depth map and project patterns
+3. Compare depth quality (synthetic, noisy, filtered)
+
+### Programmatic Usage: Depth-Based Projector
+
+**Option A: Generate synthetic depth from geometry**
+
+```python
+from structured_light_from_depth import (
+    CameraCalibration,
+    ProjectorCalibration,
+    DepthMapGenerator,
+    PatternProjector,
+    create_stripe_pattern
+)
+from structured_light_3d import Scene3D
+import numpy as np
+
+# Define camera calibration
+camera_calib = CameraCalibration(
+    position=np.array([1.2, 0.0, 1.0]),
+    look_at=np.array([0.0, 0.0, 0.0]),
+    fov=60.0,
+    resolution=(640, 480)
+)
+
+# Define projector calibration
+projector_calib = ProjectorCalibration(
+    position=np.array([0.5, -0.8, 1.5]),
+    look_at=np.array([0.0, 0.0, 0.0]),
+    fov=50.0,
+    resolution=(1024, 768)
+)
+
+# Generate depth from geometry (only needed for synthetic data)
+scene = Scene3D()
+scene.add_ground_plane()
+scene.add_box(size=(0.3, 0.3, 0.3), position=np.array([0, 0, 0.15]))
+
+depth_generator = DepthMapGenerator(camera_calib)
+rgb_base, depth_map = depth_generator.render_depth(scene)
+
+# Project pattern (no geometry needed!)
+pattern_projector = PatternProjector(camera_calib, projector_calib)
+pattern = create_stripe_pattern(projector_calib.resolution, frequency=15)
+result = pattern_projector.project_pattern_backward(pattern, depth_map, rgb_base)
+```
+
+**Option B: Use external depth from real depth camera**
+
+```python
+from structured_light_from_depth import (
+    CameraCalibration,
+    ProjectorCalibration,
+    PatternProjector,
+    DepthMapIO,
+    create_stripe_pattern
+)
+
+# Load depth from RealSense, Kinect, etc.
+depth_map = DepthMapIO.load_depth_png('path/to/depth.png', max_depth=5.0)
+# Or: depth_map = DepthMapIO.load_depth_npy('path/to/depth.npy')
+
+# Define calibrations (must match your hardware!)
+camera_calib = CameraCalibration(
+    position=np.array([1.2, 0.0, 1.0]),
+    look_at=np.array([0.0, 0.0, 0.0]),
+    fov=60.0,
+    resolution=(640, 480)
+)
+
+projector_calib = ProjectorCalibration(
+    position=np.array([0.5, -0.8, 1.5]),
+    look_at=np.array([0.0, 0.0, 0.0]),
+    fov=50.0,
+    resolution=(1024, 768)
+)
+
+# Project pattern onto depth (no geometry needed!)
+pattern_projector = PatternProjector(camera_calib, projector_calib)
+pattern = create_stripe_pattern(projector_calib.resolution, frequency=15)
+result = pattern_projector.project_pattern_backward(pattern, depth_map)
+```
+
+### Depth Map I/O
+
+```python
+from structured_light_from_depth import DepthMapIO
+
+# Save depth as 16-bit PNG
+DepthMapIO.save_depth_png(depth_map, 'output/depth.png', max_depth=5.0)
+
+# Load depth from PNG
+depth_map = DepthMapIO.load_depth_png('output/depth.png', max_depth=5.0)
+
+# Save/load as numpy array
+DepthMapIO.save_depth_npy(depth_map, 'output/depth.npy')
+depth_map = DepthMapIO.load_depth_npy('output/depth.npy')
+
+# Visualize depth with color
+depth_colored = DepthMapIO.visualize_depth(depth_map)
+```
+
+### When to Use Each Approach
+
+| Approach | Best For |
+|----------|----------|
+| **2D Pattern Generator** | Quick prototyping, simple overlays, existing depth data |
+| **3D Simulator** | Full control over geometry, testing different scenes, ground truth data |
+| **Depth-Based Projector** | Real depth camera data, RealSense/Kinect integration, no geometry knowledge |
 
 ## Configuration File (3D Simulator)
 
