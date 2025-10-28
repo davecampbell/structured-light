@@ -31,13 +31,13 @@ patterns:
     pattern_type: "sinusoidal"
     display: true
   - type: "dots"
-    dot_spacing: 40
-    dot_size: 4
-    display: false               # Multiple patterns can be displayed in concatenated view
+    dot_spacing: 25             # Reduced spacing for denser pattern
+    dot_size: 8                 # Increased size for better visibility
+    display: true               # Multiple patterns can be displayed in concatenated view
   - type: "grid"
     grid_spacing: 50
     line_thickness: 3
-    display: false
+    display: true
 
 # Scene configuration
 scene:
