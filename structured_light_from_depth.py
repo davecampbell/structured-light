@@ -434,6 +434,10 @@ def load_calibrations_from_config(config_path: str) -> Tuple[CameraCalibration, 
 
     Compatible with the config format from structured_light_3d.py.
 
+    Supports optional intrinsics specification:
+    - If intrinsics (fx, fy, cx, cy) are provided, they are used directly
+    - Otherwise, intrinsics are computed from FOV
+
     Args:
         config_path: Path to YAML configuration file
 
@@ -445,20 +449,50 @@ def load_calibrations_from_config(config_path: str) -> Tuple[CameraCalibration, 
 
     # Load camera calibration
     camera_config = config['camera']
-    camera_calib = CameraCalibration(
-        position=np.array(camera_config['position']),
-        look_at=np.array(camera_config['look_at']),
-        fov=camera_config['fov'],
-        resolution=tuple(camera_config['resolution'])
-    )
+
+    # Check if intrinsics are provided
+    intrinsics = camera_config.get('intrinsics', {})
+    if intrinsics:
+        camera_calib = CameraCalibration(
+            position=np.array(camera_config['position']),
+            look_at=np.array(camera_config['look_at']),
+            fov=camera_config.get('fov', 60.0),  # Optional if intrinsics provided
+            resolution=tuple(camera_config['resolution']),
+            fx=intrinsics.get('fx'),
+            fy=intrinsics.get('fy'),
+            cx=intrinsics.get('cx'),
+            cy=intrinsics.get('cy')
+        )
+    else:
+        camera_calib = CameraCalibration(
+            position=np.array(camera_config['position']),
+            look_at=np.array(camera_config['look_at']),
+            fov=camera_config['fov'],
+            resolution=tuple(camera_config['resolution'])
+        )
 
     # Load projector calibration
     projector_config = config['projector']
-    projector_calib = ProjectorCalibration(
-        position=np.array(projector_config['position']),
-        look_at=np.array(projector_config['look_at']),
-        fov=projector_config['fov'],
-        resolution=tuple(projector_config['resolution'])
-    )
+
+    # Check if intrinsics are provided
+    intrinsics = projector_config.get('intrinsics', {})
+    if intrinsics:
+        projector_calib = ProjectorCalibration(
+            position=np.array(projector_config['position']),
+            look_at=np.array(projector_config['look_at']),
+            fov=projector_config.get('fov', 50.0),  # Optional if intrinsics provided
+            resolution=tuple(projector_config['resolution']),
+            fx=intrinsics.get('fx'),
+            fy=intrinsics.get('fy'),
+            cx=intrinsics.get('cx'),
+            cy=intrinsics.get('cy')
+        )
+    else:
+        projector_calib = ProjectorCalibration(
+            position=np.array(projector_config['position']),
+            look_at=np.array(projector_config['look_at']),
+            fov=projector_config['fov'],
+            resolution=tuple(projector_config['resolution'])
+        )
 
     return camera_calib, projector_calib

@@ -359,6 +359,33 @@ External depth maps must have these properties:
 depth_colored = DepthMapIO.visualize_depth(depth_map)
 ```
 
+#### Specifying Camera Intrinsics
+
+When using external depth maps from real cameras, you should use the actual camera intrinsics instead of computing from FOV.
+
+**In config file:**
+```yaml
+camera:
+  position: [1.2, 0.0, 1.0]
+  look_at: [0.0, 0.0, 0.0]
+  resolution: [640, 480]
+
+  # Optional: Specify actual camera intrinsics
+  # If provided, these override FOV-based computation
+  intrinsics:
+    fx: 381.36    # Focal length X (pixels)
+    fy: 381.36    # Focal length Y (pixels)
+    cx: 320.0     # Principal point X (usually width/2)
+    cy: 240.0     # Principal point Y (usually height/2)
+```
+
+**Get intrinsics from RealSense:**
+```bash
+python get_realsense_intrinsics.py
+```
+
+This will output the intrinsics in YAML format ready to copy into your config file.
+
 #### Example: Using Intel RealSense
 
 ```python
@@ -373,7 +400,11 @@ from structured_light_from_depth import (
 pipeline = rs.pipeline()
 config = rs.config()
 config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-pipeline.start(config)
+profile = pipeline.start(config)
+
+# Get camera intrinsics
+depth_profile = profile.get_stream(rs.stream.depth)
+intrinsics = depth_profile.as_video_stream_profile().get_intrinsics()
 
 frames = pipeline.wait_for_frames()
 depth_frame = frames.get_depth_frame()
@@ -385,12 +416,16 @@ depth_map = depth_map / 1000.0
 # Save for later use
 DepthMapIO.save_depth_npy(depth_map, 'realsense_depth.npy')
 
-# Define calibrations (must match your hardware setup!)
+# Define calibrations using actual intrinsics
 camera_calib = CameraCalibration(
     position=np.array([1.2, 0.0, 1.0]),
     look_at=np.array([0.0, 0.0, 0.0]),
-    fov=60.0,
-    resolution=(640, 480)
+    fov=60.0,  # Not used when intrinsics provided
+    resolution=(intrinsics.width, intrinsics.height),
+    fx=intrinsics.fx,
+    fy=intrinsics.fy,
+    cx=intrinsics.ppx,
+    cy=intrinsics.ppy
 )
 
 projector_calib = ProjectorCalibration(
@@ -404,6 +439,18 @@ projector_calib = ProjectorCalibration(
 pattern_projector = PatternProjector(camera_calib, projector_calib)
 pattern = create_stripe_pattern(projector_calib.resolution, frequency=15)
 result = pattern_projector.project_pattern_backward(pattern, depth_map)
+```
+
+**Or use config file with intrinsics:**
+```bash
+# 1. Get intrinsics and save to config
+python get_realsense_intrinsics.py  # Copy output to config_realsense_example.yaml
+
+# 2. Capture and save depth
+# (use RealSense viewer or your own script)
+
+# 3. Run with external depth
+python run_depth_based.py config_realsense_example.yaml --depth realsense_depth.npy
 ```
 
 #### Format Comparison

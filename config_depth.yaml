@@ -1,0 +1,89 @@
+# Structured Light 3D Simulator Configuration
+# All distances in meters, angles in degrees
+
+# Projector configuration
+projector:
+  position: [0.5, -0.8, 1.5]  # [x, y, z] in meters
+  look_at: [0.0, 0.0, 0.0]    # Point the projector aims at
+  fov: 50.0                    # Field of view in degrees
+  resolution: [1024, 768]      # [width, height] in pixels
+
+# Camera configuration
+camera:
+  position: [1.2, 0.0, 1.0]   # [x, y, z] in meters
+  look_at: [0.0, 0.0, 0.0]    # Point the camera aims at
+  fov: 60.0                    # Field of view in degrees
+  resolution: [640, 480]       # [width, height] in pixels
+
+# Rendering parameters
+rendering:
+  ambient_light: 0.3           # Ambient light intensity [0-1]
+  pattern_intensity: 0.6       # Projected pattern intensity [0-1]
+
+# Pattern configuration
+patterns:
+  - type: "vertical_stripes"
+    frequency: 15.0
+    pattern_type: "sinusoidal"  # or "binary"
+    display: false               # Show this pattern in popup window (can set multiple to true)
+  - type: "horizontal_stripes"
+    frequency: 15.0
+    pattern_type: "sinusoidal"
+    display: false
+  - type: "dots"
+    dot_spacing: 25             # Reduced spacing for denser pattern
+    dot_size: 8                 # Increased size for better visibility
+    display: false               # Multiple patterns can be displayed in concatenated view
+  - type: "grid"
+    grid_spacing: 50
+    line_thickness: 3
+    display: true
+
+# Scene configuration
+scene:
+  # Ground plane
+  ground_plane:
+    enabled: true
+    size: 3.0                  # Size in meters
+    height: -0.5               # Z-coordinate
+    color: [200, 200, 200]     # RGB [0-255]
+
+  # Manual box placement
+  boxes:
+    - size: [0.25, 0.25, 0.25]           # [width, depth, height] in meters
+      position: [0.1, 0.1, 0.125]         # [x, y, z] center position
+      orientation: [0.0, 0.0, 45.0]       # [roll, pitch, yaw] in degrees
+      color: [150, 100, 100]              # RGB [0-255], null for random
+
+  #   - size: [0.15, 0.20, 0.18]
+  #    position: [-0.2, 0.15, 0.09]
+  #    orientation: [0.0, 0.0, -30.0]
+  #    color: [100, 150, 120]
+
+  #  - size: [0.30, 0.15, 0.20]
+  #    position: [0.15, -0.25, 0.10]
+  #    orientation: [10.0, 5.0, 60.0]
+  #    color: null  # Random color
+
+  # Random box generation (optional, in addition to manual boxes)
+  random_boxes:
+    enabled: true               # Set to true to add random boxes
+    count: 3                     # Number of random boxes
+    size_range:
+      min: [0.10, 0.10, 0.10]   # Minimum box size
+      max: [0.30, 0.30, 0.30]   # Maximum box size
+    position_bounds:
+      x: [-0.5, 0.5]            # X position range
+      y: [-0.5, 0.5]            # Y position range
+      z: [0.0, 0.7]             # Z position range (height above ground)
+    orientation_range:
+      roll: [0.0, 360.0]        # Roll angle range
+      pitch: [0.0, 360.0]       # Pitch angle range
+      yaw: [0.0, 360.0]         # Yaw angle range
+
+# Output configuration
+output:
+  directory: "output"
+  prefix: "structured_light_3d"
+  save_individual_patterns: true  # Save each pattern separately
+  save_comparison: true            # Save side-by-side comparison

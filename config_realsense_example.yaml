@@ -1,0 +1,70 @@
+# Example Configuration for Real Depth Camera (Intel RealSense)
+#
+# This config shows how to use actual camera intrinsics from a real depth camera
+# instead of computing them from FOV.
+#
+# To get RealSense intrinsics, use:
+#   intrinsics = depth_frame.profile.as_video_stream_profile().intrinsics
+#   fx = intrinsics.fx
+#   fy = intrinsics.fy
+#   cx = intrinsics.ppx  # principal point x
+#   cy = intrinsics.ppy  # principal point y
+
+# Projector configuration
+projector:
+  position: [0.5, -0.8, 1.5]    # Adjust to match your physical setup
+  look_at: [0.0, 0.0, 0.0]
+  fov: 50.0                      # Used if intrinsics not specified
+  resolution: [1024, 768]
+
+# Camera configuration with actual intrinsics from RealSense D435
+camera:
+  position: [1.2, 0.0, 1.0]     # Adjust to match your physical setup
+  look_at: [0.0, 0.0, 0.0]
+  resolution: [640, 480]         # Must match your depth camera resolution
+
+  # Optional: Specify actual camera intrinsics
+  # If provided, these override FOV-based computation
+  intrinsics:
+    fx: 381.36    # Focal length X (pixels)
+    fy: 381.36    # Focal length Y (pixels)
+    cx: 320.0     # Principal point X (pixels) - usually width/2
+    cy: 240.0     # Principal point Y (pixels) - usually height/2
+
+# Patterns to generate
+patterns:
+  - type: "vertical_stripes"
+    frequency: 15.0
+    pattern_type: "sinusoidal"
+    display: true
+  - type: "horizontal_stripes"
+    frequency: 15.0
+    pattern_type: "sinusoidal"
+    display: false
+  - type: "dots"
+    dot_spacing: 25
+    dot_size: 8
+    display: true
+  - type: "grid"
+    grid_spacing: 50
+    line_thickness: 3
+    display: false
+
+# Rendering parameters
+rendering:
+  ambient_light: 0.3
+  pattern_intensity: 0.6
+
+# Output settings
+output:
+  directory: "output"
+  prefix: "structured_light"
+  save_individual_patterns: true
+  save_comparison: true
+
+# Note: When using external depth, the scene configuration is not used
+# The depth comes directly from your depth camera file
+scene:
+  ground_plane:
+    enabled: false
+  boxes: []
